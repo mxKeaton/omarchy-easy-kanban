@@ -576,6 +576,24 @@ function pickTicket(t) {
   };
 }
 
+// Reads the small fixed location config. Returns an absolute data file path
+// when a valid custom location is configured, otherwise null (default).
+function customDataPath(raw) {
+  if (raw === null || raw === undefined) return null;
+  var parsed;
+  try {
+    parsed = JSON.parse(String(raw));
+  } catch (e) {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  var p = parsed.dataPath;
+  if (typeof p !== "string") return null;
+  p = p.replace(/^\s+|\s+$/g, "");
+  if (p.length < 2 || p.charAt(0) !== "/") return null;
+  return p;
+}
+
 function savePayload(state) {
   var boards = [];
   var bi, ci, ti;
@@ -656,6 +674,7 @@ if (typeof module !== "undefined") {
     hoverRecap: hoverRecap,
     recapLine: recapLine,
     savePayload: savePayload,
+    customDataPath: customDataPath,
     notificationTitle: notificationTitle,
     notificationBody: notificationBody
   };

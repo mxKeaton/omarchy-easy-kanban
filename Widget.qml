@@ -25,8 +25,25 @@ BarWidget {
   property var reminderItem: null
   property string reminderToday: ""
 
-  readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/omarchy"
-  readonly property string statePath: stateDir + "/easy-kanban.json"
+  // NOTE: This plugin is a user-owned clone, so these edits work and hot-reload,
+  // but `omarchy plugin update` will overwrite them.
+  readonly property string defaultStateDir: Quickshell.env("HOME") + "/.local/state/omarchy"
+  readonly property string defaultStatePath: defaultStateDir + "/easy-kanban.json"
+  readonly property string locationConfigDir: Quickshell.env("HOME") + "/.config/omarchy"
+  readonly property string locationConfigPath: locationConfigDir + "/easy-kanban-location.json"
+  property string statePath: defaultStatePath
+  readonly property string stateDir: root.parentDirectory(statePath)
+
+  function parentDirectory(path) {
+    var s = String(path || "")
+    var i = s.lastIndexOf("/")
+    if (i <= 0) return "/"
+    return s.substring(0, i)
+  }
+
+  property bool locationResolved: false
+  property bool pendingRevert: false
+  property var pendingRelocate: null
 
   property bool dirsReady: false
   property bool fileExisted: false
@@ -87,6 +104,57 @@ BarWidget {
     var payload = JSON.stringify(Model.savePayload(store), null, 2) + "\n"
     root.lastWritten = payload
     stateFile.setText(payload)
+  }
+
+  function applyConfig(raw) {
+    if (locationResolved) return
+    locationResolved = true
+    var custom = Model.customDataPath(raw)
+    if (custom) statePath = custom
+    mkdirProc.running = true
+  }
+
+  function writeLocationConfig(dataPath) {
+    var payload = { version: 1, dataPath: dataPath }
+    locationConfig.setText(JSON.stringify(payload, null, 2) + "\n")
+  }
+
+  function requestLocation(input, isRevert) {
+    var target = isRevert ? defaultStatePath : input
+    pendingRevert = isRevert
+    if (dirty && !saveBlocked()) {
+      pendingRelocate = { input: target }
+      flushSave()
+      return
+    }
+    beginRelocate(target)
+  }
+
+  function beginRelocate(input) {
+    probeDirProc.inputPath = input
+    probeDirProc.running = true
+  }
+
+  function relocateTargetReady(target) {
+    relocateProc.targetPath = target
+    relocateProc.running = true
+  }
+
+  function finishRelocate(target, isRevert) {
+    pendingRevert = false
+    saveTimer.stop()
+    storeReady = false
+    recovered = false
+    fileExisted = false
+    backedUp = false
+    dirty = false
+    lastWritten = ""
+    saveError = ""
+    actionError = ""
+    statePath = target
+    writeLocationConfig(isRevert ? null : target)
+    kanban.closeLocationDialog()
+    mkdirProc.running = true
   }
 
   readonly property string recapLine: storeReady
@@ -172,7 +240,10 @@ BarWidget {
     armKeys()
   }
 
-  Component.onCompleted: mkdirProc.running = true
+  Component.onCompleted: {
+    if (!locationResolved)
+      locationConfig.reload()
+  }
 
   Process {
     id: mkdirProc
@@ -181,6 +252,51 @@ BarWidget {
     onExited: {
       root.dirsReady = true
       stateFile.reload()
+    }
+  }
+
+  FileView {
+    id: locationConfig
+    path: root.locationConfigPath
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.applyConfig(text())
+    onLoadFailed: root.applyConfig("")
+    onSaved: {
+      if (root.actionError === "Could not save data location")
+        root.actionError = ""
+    }
+    onSaveFailed: root.actionError = "Could not save data location"
+  }
+
+  Process {
+    id: probeDirProc
+    property string inputPath: ""
+    command: ["sh", "-c", "test -d \"$1\"", "sh", inputPath]
+    running: false
+    onExited: function(exitCode) {
+      root.relocateTargetReady(exitCode === 0 ? inputPath + "/easy-kanban.json" : inputPath)
+    }
+  }
+
+  Process {
+    id: relocateProc
+    property string targetPath: ""
+    command: [
+      "sh", "-c",
+      "d=$(dirname \"$1\"); mkdir -p \"$d\" || exit 3; if [ ! -e \"$1\" ] && [ -e \"$2\" ]; then cp \"$2\" \"$1\" || exit 4; fi",
+      "sh", targetPath, root.statePath
+    ]
+    running: false
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        var message = "Could not use that location"
+        if (exitCode === 3) message = "Could not create that directory"
+        else if (exitCode === 4) message = "Could not copy board data"
+        kanban.setLocationError(message)
+        return
+      }
+      root.finishRelocate(targetPath, root.pendingRevert)
     }
   }
 
@@ -235,8 +351,16 @@ BarWidget {
       root.dirty = false
       root.saveError = ""
       root.recovered = false
+      if (root.pendingRelocate) {
+        var pending = root.pendingRelocate
+        root.pendingRelocate = null
+        root.beginRelocate(pending.input)
+      }
     }
-    onSaveFailed: root.saveError = "Could not save board"
+    onSaveFailed: {
+      root.saveError = "Could not save board"
+      root.pendingRelocate = null
+    }
     onFileChanged: reload()
   }
 
@@ -323,11 +447,13 @@ BarWidget {
       anchors.fill: parent
       focus: true
       store: root.store
+      dataPath: root.statePath
       saveError: root.saveError
       actionError: root.actionError
       recovered: root.recovered && root.fileExisted
       allowColumnScroll: root.desiredCardWidth > root.halfScreenWidth
       onMutationRequested: function(result) { root.applyMutation(result) }
+      onLocationRequested: function(path, revert) { root.requestLocation(path, revert) }
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {

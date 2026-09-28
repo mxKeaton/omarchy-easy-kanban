@@ -10,6 +10,7 @@ Item {
   anchors.fill: parent
 
   property var store
+  property string dataPath
   property string saveError
   property string actionError
   property bool recovered
@@ -19,6 +20,7 @@ Item {
   property bool ticketDragging: false
   property real dragGlobalX: 0
   signal mutationRequested(var result)
+  signal locationRequested(string path, bool revert)
 
   property int columnWidth: Style.space(240)
   property int columnGap: Style.space(10)
@@ -39,6 +41,7 @@ Item {
   readonly property string activeId: active && active.id ? active.id : ""
   readonly property bool overlayOpen: nameDialog.opened || ticketEditor.opened
       || confirm.opened || ticketDeleteConfirm.opened || boardSwitcher.open
+      || dataLocationDialog.opened
   readonly property bool textInputActive: {
     var item = root.Window.window ? root.Window.window.activeFocusItem : null
     return !!(item && (item instanceof TextInput || item instanceof TextEdit))
@@ -118,6 +121,39 @@ Item {
     pendingColumnId = ""
     pendingTicketId = ""
     confirmKind = ""
+  }
+
+  function openLocationDialog() {
+    dataLocationDialog.opened = true
+  }
+
+  function closeLocationDialog() {
+    dataLocationDialog.opened = false
+  }
+
+  function setLocationError(message) {
+    dataLocationDialog.error = message
+  }
+
+  function submitLocation() {
+    dataLocationDialog.error = ""
+    var raw = dataLocationDialog.draft
+    var trimmed = raw === null || raw === undefined ? ""
+      : String(raw).replace(/^\s+|\s+$/g, "")
+    if (trimmed === "") {
+      dataLocationDialog.error = "Enter a path"
+      return
+    }
+    if (trimmed.charAt(0) !== "/") {
+      dataLocationDialog.error = "Path must be absolute"
+      return
+    }
+    root.locationRequested(trimmed, false)
+  }
+
+  function revertLocation() {
+    dataLocationDialog.error = ""
+    root.locationRequested("", true)
   }
 
   function fillTicketEditor(ticketId) {
@@ -256,6 +292,10 @@ Item {
       requestDeleteTicket(target.ticket.id)
       return true
     }
+    if (ch === "p") {
+      openLocationDialog()
+      return true
+    }
     if (ch !== "n" || !active || !active.columns || active.columns.length === 0) return false
     var found = focusedOnBoard()
     var colId = found && found.column ? found.column.id : focusedColumnId
@@ -323,6 +363,7 @@ Item {
     confirm.opened = false
     ticketDeleteConfirm.opened = false
     boardSwitcher.open = false
+    dataLocationDialog.opened = false
     resetDeleteState()
   }
 
@@ -514,7 +555,7 @@ Item {
     anchors.right: parent.right
     anchors.top: statusLabel.bottom
     anchors.topMargin: Style.space(10)
-    anchors.bottom: shortcutHint.top
+    anchors.bottom: hintBlock.top
     anchors.bottomMargin: Style.space(6)
     clip: true
     boundsBehavior: Flickable.StopAtBounds
@@ -582,17 +623,34 @@ Item {
     onTriggered: root.scrollColumnsForDrag()
   }
 
-  Text {
-    id: shortcutHint
+  Column {
+    id: hintBlock
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    text: "N new ticket  ·  Del delete  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  Esc"
-    color: Color.muted
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-    elide: Text.ElideRight
-    horizontalAlignment: Text.AlignHCenter
+    spacing: Style.space(2)
+
+    Text {
+      id: shortcutHint
+      width: parent.width
+      text: "N new ticket  ·  Del delete  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  Esc"
+      color: Color.muted
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+      horizontalAlignment: Text.AlignHCenter
+    }
+
+    Text {
+      id: shortcutHintExtra
+      width: parent.width
+      text: "P data location"
+      color: Color.muted
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+      horizontalAlignment: Text.AlignHCenter
+    }
   }
 
   NameDialog {
@@ -606,6 +664,15 @@ Item {
       if (kind === "board") root.submitBoard(name)
       else root.submitColumn(name, color)
     }
+  }
+
+  DataLocationDialog {
+    id: dataLocationDialog
+    anchors.fill: parent
+    currentPath: root.dataPath
+    onCanceled: opened = false
+    onSubmitted: root.submitLocation()
+    onReverted: root.revertLocation()
   }
 
   PanelWindow {
