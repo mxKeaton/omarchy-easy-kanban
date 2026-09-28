@@ -23,9 +23,8 @@ Item {
   onOpenedChanged: {
     if (opened) {
       draft = currentPath
-      pathField.text = currentPath
       error = ""
-      Qt.callLater(function() { pathField.forceActiveFocus() })
+      Qt.callLater(function() { if (root.opened) pathField.forceActiveFocus() })
     }
   }
 
@@ -82,7 +81,7 @@ Item {
 
       Text {
         width: parent.width
-        text: "Folder or full file path for easy-kanban.json"
+        text: "Path to easy-kanban.json. The board file is moved there."
         color: Color.muted
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -92,7 +91,7 @@ Item {
       TextField {
         id: pathField
         width: parent.width
-        placeholderText: "/path/to/folder"
+        placeholderText: "/path/to/easy-kanban.json"
         text: root.draft
         onTextEdited: {
           root.draft = text

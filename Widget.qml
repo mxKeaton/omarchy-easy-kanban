@@ -132,11 +132,17 @@ BarWidget {
 
   function beginRelocate(input) {
     probeDirProc.inputPath = input
+    probeDirProc.command = ["sh", "-c", "test -d \"$1\"", "sh", input]
     probeDirProc.running = true
   }
 
   function relocateTargetReady(target) {
     relocateProc.targetPath = target
+    relocateProc.command = [
+      "sh", "-c",
+      "d=$(dirname \"$1\"); mkdir -p \"$d\" || exit 3; if [ \"$1\" != \"$2\" ] && [ -e \"$2\" ]; then mv -f \"$2\" \"$1\" || exit 4; fi",
+      "sh", target, root.statePath
+    ]
     relocateProc.running = true
   }
 
@@ -272,7 +278,6 @@ BarWidget {
   Process {
     id: probeDirProc
     property string inputPath: ""
-    command: ["sh", "-c", "test -d \"$1\"", "sh", inputPath]
     running: false
     onExited: function(exitCode) {
       root.relocateTargetReady(exitCode === 0 ? inputPath + "/easy-kanban.json" : inputPath)
@@ -282,17 +287,12 @@ BarWidget {
   Process {
     id: relocateProc
     property string targetPath: ""
-    command: [
-      "sh", "-c",
-      "d=$(dirname \"$1\"); mkdir -p \"$d\" || exit 3; if [ ! -e \"$1\" ] && [ -e \"$2\" ]; then cp \"$2\" \"$1\" || exit 4; fi",
-      "sh", targetPath, root.statePath
-    ]
     running: false
     onExited: function(exitCode) {
       if (exitCode !== 0) {
         var message = "Could not use that location"
         if (exitCode === 3) message = "Could not create that directory"
-        else if (exitCode === 4) message = "Could not copy board data"
+        else if (exitCode === 4) message = "Could not move board data"
         kanban.setLocationError(message)
         return
       }

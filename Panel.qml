@@ -486,6 +486,16 @@ Item {
           root.openBoardDialog("create", "")
         }
       }
+
+      Button {
+        text: "Data location"
+        implicitHeight: root.controlH
+        height: root.controlH
+        onClicked: {
+          boardSwitcher.open = false
+          root.openLocationDialog()
+        }
+      }
     }
 
     Button {
@@ -555,7 +565,7 @@ Item {
     anchors.right: parent.right
     anchors.top: statusLabel.bottom
     anchors.topMargin: Style.space(10)
-    anchors.bottom: hintBlock.top
+    anchors.bottom: shortcutHint.top
     anchors.bottomMargin: Style.space(6)
     clip: true
     boundsBehavior: Flickable.StopAtBounds
@@ -623,34 +633,17 @@ Item {
     onTriggered: root.scrollColumnsForDrag()
   }
 
-  Column {
-    id: hintBlock
+  Text {
+    id: shortcutHint
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    spacing: Style.space(2)
-
-    Text {
-      id: shortcutHint
-      width: parent.width
-      text: "N new ticket  ·  Del delete  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  Esc"
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
-      horizontalAlignment: Text.AlignHCenter
-    }
-
-    Text {
-      id: shortcutHintExtra
-      width: parent.width
-      text: "P data location"
-      color: Color.muted
-      font.family: Style.font.family
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
-      horizontalAlignment: Text.AlignHCenter
-    }
+    text: "N new ticket  ·  Del delete  ·  Arrows/HJKL focus  ·  Shift+arrows move  ·  P data location  ·  Esc"
+    color: Color.muted
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+    elide: Text.ElideRight
+    horizontalAlignment: Text.AlignHCenter
   }
 
   NameDialog {
